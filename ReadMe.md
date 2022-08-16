@@ -89,7 +89,7 @@ int main(void)
 	AddCmd("add", "add t2", add);//添加测试指令4
   while (1)
   {
-		ShellFunction();//需要循环调用，才可以运行
+		ShellFunction();//需要循环调用，才可以运行（至少输入一条指令后需要运行一次）
   }
 }
 ```
