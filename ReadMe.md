@@ -79,6 +79,12 @@ void del()
 	DelCmd("t1");
 }
 
+void add()
+{
+	PrintfDebug("\r\n 添加测试一！ add Test 1!");
+	AddCmd("t1", "Printf test 1", test1);//添加测试指令1
+}
+
 int main(void)
 {
 	PrintfDebug("Start\r\n");//开始
