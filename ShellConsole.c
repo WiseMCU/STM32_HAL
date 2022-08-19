@@ -92,12 +92,13 @@ HAL_StatusTypeDef AddCmd(char *Cmd, char * Describe, void (*Function)())
 
 HAL_StatusTypeDef DelCmd(char *Cmd)
 {
+	
 	struct CmdListNode *bufNode = ListHand.hand;
 	struct CmdListNode *DelNode = bufNode->next;
 	
 	for(uint16_t i = ListHand.CmdNum; i > 1; i--)
 	{
-		if(strncmp(Cmd, DelNode->Cmd, (strlen(Cmd))) == 0)
+		if((strlen(Cmd) == strlen(DelNode->Cmd)) && (strncmp(Cmd, DelNode->Cmd, (strlen(Cmd))) == 0))
 		{
 			bufNode->next = DelNode->next;
 			
@@ -149,13 +150,26 @@ inline static void help(void)
 inline static struct CmdListNode* SearchCmd(char * Cmd) 
 {
 	struct CmdListNode *bufNode = ListHand.hand;
-	for(uint16_t i = ListHand.CmdNum; i > 0; i--)
+	if(ShellUart.RxFlag)
 	{
-		if(((strlen(Cmd) - 1) == strlen(bufNode->Cmd)) & (strncmp(Cmd, bufNode->Cmd, strlen(bufNode->Cmd)) == 0))
+		for(uint16_t i = ListHand.CmdNum; i > 0; i--)
 		{
-			return bufNode;
-		}else{
-			bufNode = bufNode->next;
+			if(((strlen(Cmd) - 1) == strlen(bufNode->Cmd)) & (strncmp(Cmd, bufNode->Cmd, strlen(bufNode->Cmd)) == 0))
+			{
+				return bufNode;
+			}else{
+				bufNode = bufNode->next;
+			}
+		}
+	}else{
+		for(uint16_t i = ListHand.CmdNum; i > 0; i--)
+		{
+			if((strlen(Cmd) == strlen(bufNode->Cmd)) & (strncmp(Cmd, bufNode->Cmd, strlen(bufNode->Cmd)) == 0))
+			{
+				return bufNode;
+			}else{
+				bufNode = bufNode->next;
+			}
 		}
 	}
 	return NULL;
@@ -205,6 +219,7 @@ void ShellFunction(void)
 			{
 				struct CmdListNode *bufNode = NULL;
 				bufNode =	SearchCmd((char*)ShellUart.RxData);
+				ShellUart.RxFlag = 0;
 				if(bufNode == NULL)
 				{
 					Print("\r\nInvalid [%.*s] CMD,Input help or push [TAB] get CMD", ShellUart.RxLen, ShellUart.RxData);
@@ -237,6 +252,28 @@ inline static void CheckCmd(uint16_t Size)
 	}
 }
 
+inline static int ReplenishCmd(void)
+{
+	if(rxLen == 0)
+	{
+		return HAL_ERROR;
+	}
+	struct CmdListNode *bufNode = ListHand.hand;
+	for(uint16_t i = ListHand.CmdNum; i > 0; i--)
+	{
+		if((rxLen <= strlen(bufNode->Cmd)) & (strncmp((char*)ShellUart.RxData, bufNode->Cmd, rxLen) == 0))
+		{
+			Print("%s", &bufNode->Cmd[rxLen]);
+			rxLen = strlen(bufNode->Cmd);
+			memcpy(ShellUart.RxData, bufNode->Cmd, rxLen);
+			return HAL_OK;
+		}else{
+			bufNode = bufNode->next;
+		}
+	}
+	return HAL_ERROR;
+}
+
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 {
 	if(huart->Instance == ShellUart.UartHandle->Instance)
@@ -247,6 +284,7 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 			{
 				switch(ShellUart.RxData[rxLen])
 				{
+					/* 删除键 */
 					case 8:
 						if(rxLen)
 						{
@@ -255,12 +293,17 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 						}
 						ShellUart.StartRx(ShellUart.UartHandle, &ShellUart.RxData[rxLen], (ShellConsoleMaxSize - rxLen));
 						break;
-						
+					/* TAB键 */
 					case 9:
-						HelpNode.Function();
-						ClearShellUartRx();
+						if(ReplenishCmd())
+						{
+							HelpNode.Function();
+							ClearShellUartRx();
+						}else{
+							ShellUart.StartRx(ShellUart.UartHandle, &ShellUart.RxData[rxLen], (ShellConsoleMaxSize - rxLen));
+						}
 						break;
-					
+					/* 回车键 */
 					case '\r':
 						if(rxLen)
 						{
@@ -271,7 +314,7 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 							ClearShellUartRx();
 						}
 						break;
-					
+					/* 其他键 */
 					default:
 						Print("%.*s", Size, &ShellUart.RxData[rxLen]);
 						rxLen += Size;
