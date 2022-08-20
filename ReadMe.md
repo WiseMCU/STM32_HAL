@@ -1,4 +1,4 @@
-# 轻量控制台V1.3（by欧阳云鹏）
+# 轻量控制台V1.4（by欧阳云鹏）
 
 ### 版本更新
 
@@ -9,6 +9,8 @@
 > 2022.8.17：V1.2   添加Backspace按键支持
 >
 > 2022.8.19：V1.3   添加TAB键复用功能，TAB初始功能为查询指令功能，同时添加指令补全功能
+>
+> 2022.8.20：V1.4   添加ShellGetStrCMD函数
 
 ### 宏开关说明
 
@@ -58,6 +60,12 @@ HAL_StatusTypeDef AddCmd(char *Cmd, char * Describe, void (*Function)());
  @return： 成功返回HAL_OK
 */
 HAL_StatusTypeDef DelCmd(char *Cmd);
+
+/* 阻塞方式获取下一条输入的指令
+ @return： 成功返回获取的指令字符串指针 
+里面阻塞可以在操作系统里面挂起
+*/
+uint8_t* ShellGetStrCMD(void);
 ```
 
 ### 组件说明
@@ -86,34 +94,42 @@ void test2()
 void del()
 {
 	PrintfDebug("\r\n 删除测试一！ Delete Test 1!");
-	DelCmd("t1");
+	ShellDelCmd("t1");
 }
 
 void del_help()
 {
 	PrintfDebug("\r\n 删除查询指令！ Delete help!");
-	DelCmd("help");
+	ShellDelCmd("help");
 }
 
 void add()
 {
 	PrintfDebug("\r\n 添加测试一！ add Test 1!");
-	AddCmd("t1", "Printf test 1", test1);//添加测试指令1
+	ShellAddCmd("t1", "Printf test 1", test1);//添加测试指令1
+}
+
+void UartTx(void)
+{
+	uint8_t* Cmd = ShellGetStrCMD();
+	PrintfDebug("\r\nGetStr[%.*s]", (strlen((char*)Cmd) - 1), Cmd);
 }
 
 int main(void)
 {
-	PrintfDebug("Start\r\n");
+	PrintfDebug("Start");
 	ShellConsoleInit(&huart1);
-	AddCmd("t1", "运行test1程序", test1);
-	AddCmd("t2", "运行test2程序", test2);
-	AddCmd("del", "删除t1指令", del);
-	AddCmd("add", "添加t1指令", add);
-	AddCmd("del help", "删除help指令", del_help);
+	ShellAddCmd("t1", "运行test1程序", test1);
+	ShellAddCmd("t2", "运行test2程序", test2);
+	ShellAddCmd("t3", "运行UartTx程序", UartTx);
+	ShellAddCmd("del", "删除t1指令", del);
+	ShellAddCmd("add", "添加t1指令", add);
+	ShellAddCmd("del help", "删除help指令", del_help);
   while (1)
   {
 		ShellFunction();//需要循环调用，才可以运行
   }
+}
 ```
 
 ### PrintfDebug原型
