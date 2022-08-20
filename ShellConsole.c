@@ -39,10 +39,15 @@ static ShellConsoleType ShellUart;
 
 static uint32_t rxLen = 0;
 
+enum
+{
+	WaitCMD = 0,
+	GotCMD,
+};
 
 /* List */
 
-HAL_StatusTypeDef AddCmd(char *Cmd, char * Describe, void (*Function)())
+HAL_StatusTypeDef ShellAddCmd(char *Cmd, char * Describe, void (*Function)())
 {
 	struct CmdListNode *bufNode = SearchCmd(Cmd);
 	
@@ -90,7 +95,7 @@ HAL_StatusTypeDef AddCmd(char *Cmd, char * Describe, void (*Function)())
 	return HAL_OK;
 }
 
-HAL_StatusTypeDef DelCmd(char *Cmd)
+HAL_StatusTypeDef ShellDelCmd(char *Cmd)
 {
 	
 	struct CmdListNode *bufNode = ListHand.hand;
@@ -150,7 +155,7 @@ inline static void help(void)
 inline static struct CmdListNode* SearchCmd(char * Cmd) 
 {
 	struct CmdListNode *bufNode = ListHand.hand;
-	if(ShellUart.RxFlag)
+	if(ShellUart.RxFlag == GotCMD)
 	{
 		for(uint16_t i = ListHand.CmdNum; i > 0; i--)
 		{
@@ -178,6 +183,55 @@ inline static struct CmdListNode* SearchCmd(char * Cmd)
 
 /* Shell */
 
+uint8_t* ShellGetStrCMD(void)
+{
+	memset(ShellUart.RxData, 0, ShellConsoleMaxSize);
+	ShellUart.RxLen = 0;
+	rxLen = 0;
+	ShellUart.RxFlag = WaitCMD;
+	ShellUart.StartRx(ShellUart.UartHandle, ShellUart.RxData, ShellConsoleMaxSize);
+	Print("\r\n>");
+	while(ShellUart.RxFlag == WaitCMD)
+	{
+		/* 操作系统挂起放在这里 */
+	}
+	return (ShellUart.RxData);
+}
+
+void ShellFunction(void)
+{
+	if(ListHand.SearchFlag == 0)
+	{
+		ListHand.SearchFlag = 1;
+	}
+	
+	if(ShellUart.RxFlag == GotCMD)
+	{
+		if(ShellUart.RxLen)
+		{
+			#if SHELL_USE_ECHO
+			Print("\r\nRX[%d]>%s", ShellUart.RxLen, ShellUart.RxData);
+			#endif
+			
+			if((ShellUart.RxLen <= ShellCmdMaxSize))
+			{
+				struct CmdListNode *bufNode = NULL;
+				bufNode =	SearchCmd((char*)ShellUart.RxData);
+				ShellUart.RxFlag = WaitCMD;
+				if(bufNode == NULL)
+				{
+					Print("\r\nInvalid [%.*s] CMD,Input help or push [TAB] get CMD", ShellUart.RxLen, ShellUart.RxData);
+				}else{
+					bufNode->Function();
+				}
+			}else{
+				Print("\r\nError CMD Maxsize [%d]", ShellCmdMaxSize);
+			}
+		}
+		ClearShellUartRx();
+	}
+}
+
 HAL_StatusTypeDef ShellConsoleInit(UART_HandleTypeDef* huart)
 {
 	ListHand.CmdNum = 1;
@@ -198,48 +252,12 @@ HAL_StatusTypeDef ShellConsoleInit(UART_HandleTypeDef* huart)
 	return	ShellUart.StartRx(ShellUart.UartHandle, &ShellUart.RxData[rxLen], ShellConsoleMaxSize);
 }
 
-
-
-void ShellFunction(void)
-{
-	if(ListHand.SearchFlag == 0)
-	{
-		ListHand.SearchFlag = 1;
-	}
-	
-	if(ShellUart.RxFlag)
-	{
-		if(ShellUart.RxLen)
-		{
-			#if SHELL_USE_ECHO
-			Print("\r\nRX[%d]>%s", ShellUart.RxLen, ShellUart.RxData);
-			#endif
-			
-			if((ShellUart.RxLen <= ShellCmdMaxSize))
-			{
-				struct CmdListNode *bufNode = NULL;
-				bufNode =	SearchCmd((char*)ShellUart.RxData);
-				ShellUart.RxFlag = 0;
-				if(bufNode == NULL)
-				{
-					Print("\r\nInvalid [%.*s] CMD,Input help or push [TAB] get CMD", ShellUart.RxLen, ShellUart.RxData);
-				}else{
-					bufNode->Function();
-				}
-			}else{
-				Print("\r\nError CMD Maxsize [%d]", ShellCmdMaxSize);
-			}
-		}
-		ClearShellUartRx();
-	}
-}
-
 inline static void CheckCmd(uint16_t Size)
 {
 	switch(ShellUart.RxData[rxLen + Size - 1])
 	{
 		case '\r':
-			ShellUart.RxFlag = 1;
+			ShellUart.RxFlag = GotCMD;
 			ShellUart.RxLen  = rxLen + Size - 1;
 			rxLen = 0;
 			break;
@@ -307,7 +325,7 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 					case '\r':
 						if(rxLen)
 						{
-							ShellUart.RxFlag = 1;
+							ShellUart.RxFlag = GotCMD;
 							ShellUart.RxLen  = rxLen + Size - 1;
 							rxLen = 0;
 						}else{
@@ -342,8 +360,7 @@ inline static void ClearShellUartRx(void)
 	memset(ShellUart.RxData, 0, ShellConsoleMaxSize);
 	ShellUart.RxLen = 0;
 	rxLen = 0;
-	ShellUart.RxFlag = 0;
+	ShellUart.RxFlag = WaitCMD;
 	ShellUart.StartRx(ShellUart.UartHandle, ShellUart.RxData, ShellConsoleMaxSize);
 	Print("\r\nCMD>");
 }
-
